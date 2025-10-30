@@ -90,6 +90,27 @@ jobs:
           keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      - name: 10.1-CleanupAndRenameAPKs
+        run: |
+          cd app/build/outputs/apk/release
+          echo "📦 Cleaning up intermediate APK files..."
+          # 删除未签名和仅对齐的APK
+          rm -f *unsigned.apk
+          rm -f *unsigned-aligned.apk
+          
+          # 重命名signed APK，去掉"unsigned"字样
+          echo "📝 Renaming APK files..."
+          for file in *unsigned-signed.apk; do
+            if [ -f "$file" ]; then
+              newname=$(echo "$file" | sed 's/-unsigned-signed/-signed/')
+              mv "$file" "$newname"
+              echo "  ✓ $newname"
+            fi
+          done
+          
+          echo "✅ Cleanup complete. Final files:"
+          ls -lh *.apk
+
       - name: 11-CreateNewTag
         run: |
           git config --global user.email "2867555086@github.com"
