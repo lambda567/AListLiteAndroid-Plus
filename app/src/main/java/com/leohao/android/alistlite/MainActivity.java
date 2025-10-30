@@ -161,35 +161,51 @@ public class MainActivity extends AppCompatActivity {
         }
         
         // 根据Android版本申请不同的存储权限
-        XXPermissions.XXPermissionsBuilder permissionsBuilder = XXPermissions.with(this)
-                // 申请通知权限（Android 13+需要）
-                .permission(Permission.POST_NOTIFICATIONS)
-                // 申请电池优化忽略权限
-                .permission(Permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-        
         // Android 11+（API 30+）：MANAGE_EXTERNAL_STORAGE（所有文件管理权限）
         // Android 6-10（API 23-29）：READ_EXTERNAL_STORAGE + WRITE_EXTERNAL_STORAGE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            permissionsBuilder.permission(Permission.MANAGE_EXTERNAL_STORAGE);
-        } else {
-            permissionsBuilder.permission(Permission.Group.STORAGE);
-        }
-        
-        permissionsBuilder.request(new OnPermissionCallback() {
-            @Override
-            public void onGranted(@NonNull List<String> permissions, boolean allGranted) {
-                if (!allGranted) {
-                    showToast("部分权限未授予，软件可能无法正常运行");
-                }
-            }
+            // Android 11+
+            XXPermissions.with(this)
+                    .permission(Permission.POST_NOTIFICATIONS)
+                    .permission(Permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .permission(Permission.MANAGE_EXTERNAL_STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(@NonNull List<String> permissions, boolean allGranted) {
+                            if (!allGranted) {
+                                showToast("部分权限未授予，软件可能无法正常运行");
+                            }
+                        }
 
-            @Override
-            public void onDenied(@NonNull List<String> permissions, boolean doNotAskAgain) {
-                if (doNotAskAgain) {
-                    showToast("请手动授予相关权限");
-                }
-            }
-        });
+                        @Override
+                        public void onDenied(@NonNull List<String> permissions, boolean doNotAskAgain) {
+                            if (doNotAskAgain) {
+                                showToast("请手动授予相关权限");
+                            }
+                        }
+                    });
+        } else {
+            // Android 6-10
+            XXPermissions.with(this)
+                    .permission(Permission.POST_NOTIFICATIONS)
+                    .permission(Permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(@NonNull List<String> permissions, boolean allGranted) {
+                            if (!allGranted) {
+                                showToast("部分权限未授予，软件可能无法正常运行");
+                            }
+                        }
+
+                        @Override
+                        public void onDenied(@NonNull List<String> permissions, boolean doNotAskAgain) {
+                            if (doNotAskAgain) {
+                                showToast("请手动授予相关权限");
+                            }
+                        }
+                    });
+        }
     }
 
     @Override

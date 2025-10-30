@@ -3,6 +3,7 @@ plugins {
 }
 
 android {
+    namespace 'com.leohao.android.alistlite'
     compileSdk 34
 
     defaultConfig {
@@ -10,7 +11,7 @@ android {
         minSdk 21
         targetSdk 34
         versionCode 1
-        versionName "2.1.7-beta4"
+        versionName "2.0.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         setProperty("archivesBaseName", "AListLite-v${versionName}")
     }
