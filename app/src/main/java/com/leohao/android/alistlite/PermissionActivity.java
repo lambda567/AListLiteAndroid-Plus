@@ -60,6 +60,11 @@ public class PermissionActivity extends AppCompatActivity implements OnItemClick
         if (item.getIsGranted()) {
             return;
         }
+        // Android 5.0-5.1 不支持运行时权限请求
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            showToast("Android 5.x 系统权限在安装时已自动授予");
+            return;
+        }
         //跳转到对应权限设置页面
         try {
             XXPermissions.with(this).permission(item.getPermissionName()).request(new OnPermissionCallback() {
@@ -113,8 +118,15 @@ public class PermissionActivity extends AppCompatActivity implements OnItemClick
                 if (!Constants.permissionDescriptionMap.containsKey(permission)) {
                     continue;
                 }
-                //若当前 API 版本大于 23，则跳过 READ_EXTERNAL_STORAGE 检查（新版本被弃用）
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Permission.READ_EXTERNAL_STORAGE.equals(permission)) {
+                //若当前 API 版本大于等于 33（Android 13），则跳过 READ_EXTERNAL_STORAGE 和 WRITE_EXTERNAL_STORAGE 检查（被新权限替代）
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (Permission.READ_EXTERNAL_STORAGE.equals(permission) || 
+                        Permission.WRITE_EXTERNAL_STORAGE.equals(permission)) {
+                        continue;
+                    }
+                }
+                //若当前 API 版本大于等于 30（Android 11），则跳过 WRITE_EXTERNAL_STORAGE 检查（被 MANAGE_EXTERNAL_STORAGE 替代）
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Permission.WRITE_EXTERNAL_STORAGE.equals(permission)) {
                     continue;
                 }
                 //获取权限状态

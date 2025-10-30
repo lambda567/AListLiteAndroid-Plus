@@ -151,11 +151,27 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * 权限检查
+     * Android 5.0-5.1（API 21-22）：权限在安装时自动授予，无需运行时请求
+     * Android 6.0+（API 23+）：需要运行时请求权限
      */
     private void checkPermissions() {
+        // Android 6.0 以下版本不需要运行时权限请求
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return;
+        }
+        
         XXPermissions.with(this)
-                // 申请单个权限
-                .permission(Permission.POST_NOTIFICATIONS).permission(Permission.MANAGE_EXTERNAL_STORAGE).permission(Permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).request(new OnPermissionCallback() {
+                // 申请通知权限（Android 13+需要）
+                .permission(Permission.POST_NOTIFICATIONS)
+                // 申请电池优化忽略权限
+                .permission(Permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                // 根据Android版本申请不同的存储权限：
+                // - Android 11+（API 30+）：MANAGE_EXTERNAL_STORAGE（所有文件管理权限）
+                // - Android 6-10（API 23-29）：READ_EXTERNAL_STORAGE + WRITE_EXTERNAL_STORAGE
+                .permission(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ? 
+                    Permission.MANAGE_EXTERNAL_STORAGE : 
+                    Permission.Group.STORAGE)
+                .request(new OnPermissionCallback() {
                     @Override
                     public void onGranted(@NonNull List<String> permissions, boolean allGranted) {
                         if (!allGranted) {

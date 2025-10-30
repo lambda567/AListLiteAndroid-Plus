@@ -195,6 +195,8 @@ public class AlistService extends Service {
         //初始化电源管理器
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, AlistService.class.getName());
+        // 常驻服务需要持续保持CPU唤醒，不设置超时
+        // 配合前台服务使用，确保Web服务24/7可用
         wakeLock.acquire();
     }
 
