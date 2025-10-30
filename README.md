@@ -1,3 +1,6 @@
+该项目是原作者长期未修复安卓9上无法写入外置存储的问题，无奈之下自行尝试修复，才创建的分支，感谢原作者的奉献。
+
+
 <p align="center"><a href="https://github.com/LeoHaoVIP/AListLiteAndroid" target="_blank" rel="noopener noreferrer"><img width="100" src="./README/ic_launcher.png" alt="yoga logo"></a></p>
     <h3 align="center">AListLite | 在 Android 上一键启动 OpenList 服务</h3>
 <h5 align="center">AListLite 支持服务一键启动、状态栏磁贴、后台常驻、开机自启和高级配置等功能，界面简洁，上手简单。</h5>

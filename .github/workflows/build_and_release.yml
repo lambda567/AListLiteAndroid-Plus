@@ -34,8 +34,18 @@ jobs:
         id: get_latest_tag
         run: |
           LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | grep -v ^.*-auto$ | head -n 1)
-          echo "Latest tag: $LATEST_TAG"
+          # 如果没有找到tag，从build.gradle读取版本号作为默认值
+          if [ -z "$LATEST_TAG" ]; then
+            VERSION_FROM_GRADLE=$(grep -oP 'versionName "\K[^"]+' app/build.gradle)
+            LATEST_TAG="v${VERSION_FROM_GRADLE}"
+            echo "⚠️ No tags found in repository!"
+            echo "📦 Using version from build.gradle as default: $LATEST_TAG"
+            echo "💡 Tip: Create a tag with: git tag $LATEST_TAG && git push origin $LATEST_TAG"
+          else
+            echo "✅ Found latest tag: $LATEST_TAG"
+          fi
           NEW_TAG="${LATEST_TAG}-auto"
+          echo "🏷️ New tag will be: $NEW_TAG"
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
@@ -63,6 +73,7 @@ jobs:
         with:
           cmdline-tools-version: 11076708
           accept-android-sdk-licenses: true
+          packages: 'build-tools;29.0.3 build-tools;30.0.3'
 
       - name: 8-GrantGradlew
         run: chmod +x gradlew
