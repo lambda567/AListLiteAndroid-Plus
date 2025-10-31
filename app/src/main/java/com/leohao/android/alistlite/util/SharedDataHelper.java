@@ -48,4 +48,25 @@ public class SharedDataHelper {
             sharedMap.edit().putString(key, value.toString()).apply();
         }
     }
+
+    /**
+     * 静态方法：获取布尔值
+     *
+     * @param key          键
+     * @param defaultValue 默认值
+     * @return 布尔值
+     */
+    public static boolean getBoolean(String key, boolean defaultValue) {
+        return getInstance().getBoolShareData(key, defaultValue);
+    }
+
+    /**
+     * 静态方法：保存布尔值
+     *
+     * @param key   键
+     * @param value 值
+     */
+    public static void putBoolean(String key, boolean value) {
+        getInstance().putSharedData(key, value);
+    }
 }
