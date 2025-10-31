@@ -45,6 +45,7 @@
             android:supportsRtl="true"
             android:requestLegacyExternalStorage="true"
             android:preserveLegacyExternalStorage="true"
+            android:extractNativeLibs="true"
             android:theme="@style/Theme.AList"
             tools:targetApi="q">
         <meta-data android:name="ScopedStorage" android:value="true"/>

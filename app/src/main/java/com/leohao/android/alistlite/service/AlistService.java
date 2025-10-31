@@ -23,6 +23,7 @@ import com.leohao.android.alistlite.model.Alist;
 import com.leohao.android.alistlite.util.AppUtil;
 import com.leohao.android.alistlite.util.Constants;
 import com.leohao.android.alistlite.util.StorageUtil;
+import com.leohao.android.alistlite.util.PermissionDiagnostic;
 
 import java.io.File;
 import java.io.IOException;
@@ -268,19 +269,69 @@ public class AlistService extends Service {
                         continue;
                     }
                     
-                    // 挂载到AList
+                    // 挂载策略：
+                    // - 内置存储：挂载根目录
+                    // - 外置存储：挂载根目录（用户需要完整访问）
                     String mountPath = storage.isPrimary ? Constants.ALIST_STORAGE_DRIVER_MOUNT_PATH : storage.name;
-                    alistServer.addLocalStorageDriver(storage.path, mountPath);
+                    String physicalPath = storage.path;
+                    
+                    // 挂载到AList
+                    alistServer.addLocalStorageDriver(physicalPath, mountPath);
                     mountCount++;
                     
                     Log.i(TAG, String.format("✅ 已挂载 [%d/%d]: %s -> %s", 
-                            mountCount, storageDevices.size(), mountPath, storage.path));
+                            mountCount, storageDevices.size(), mountPath, physicalPath));
                     
-                    // 检查写入权限
-                    if (storageFile.canWrite()) {
-                        Log.i(TAG, "   ✓ 可写入");
+                    // 对于外置存储，进行全面的权限诊断
+                    if (storage.isRemovable) {
+                        Log.i(TAG, "   🔍 开始外置存储权限诊断...");
+                        Log.i(TAG, "   ========================================");
+                        String diagnostic = PermissionDiagnostic.diagnoseStorage(this, physicalPath);
+                        Log.i(TAG, diagnostic);
+                        Log.i(TAG, "   ========================================");
+                        
+                        // 如果诊断发现问题，尝试修复
+                        if (diagnostic.contains("只读") || diagnostic.contains("✗") || 
+                            diagnostic.contains("失败") || diagnostic.contains("ro,")) {
+                            Log.w(TAG, "   ⚠️ 检测到权限问题，尝试修复...");
+                            String fixResult = PermissionDiagnostic.tryFixStoragePermissions(physicalPath);
+                            Log.i(TAG, "   " + fixResult);
+                            
+                            // 再次测试
+                            Log.i(TAG, "   🔄 修复后再次测试...");
+                            try {
+                                File testFile = new File(physicalPath, ".alistlite_write_test_after_fix.tmp");
+                                boolean created = testFile.createNewFile();
+                                if (created) {
+                                    File renamed = new File(physicalPath, ".alistlite_renamed.tmp");
+                                    boolean renameOk = testFile.renameTo(renamed);
+                                    if (renameOk) {
+                                        renamed.delete();
+                                        Log.i(TAG, "   ✅ 修复后测试成功：可创建、重命名、删除");
+                                    } else {
+                                        testFile.delete();
+                                        Log.e(TAG, "   ❌ 修复后仍无法重命名！");
+                                        Log.e(TAG, "   💡 可能原因：");
+                                        Log.e(TAG, "      1. 存储挂载为只读（ro）- 无解");
+                                        Log.e(TAG, "      2. SELinux强制模式 - 需要宽松模式或Root");
+                                        Log.e(TAG, "      3. 文件系统损坏 - 需要修复或格式化");
+                                    }
+                                } else {
+                                    Log.e(TAG, "   ❌ 修复后仍无法创建文件！");
+                                }
+                            } catch (Exception e) {
+                                Log.e(TAG, "   ❌ 修复后测试异常: " + e.getMessage());
+                            }
+                        } else {
+                            Log.i(TAG, "   ✅ 权限诊断通过");
+                        }
                     } else {
-                        Log.w(TAG, "   ⚠ 只读模式");
+                        // 内置存储简单检查
+                        if (storageFile.canWrite()) {
+                            Log.i(TAG, "   ✓ 可写入");
+                        } else {
+                            Log.w(TAG, "   ⚠ 只读模式（异常）");
+                        }
                     }
                     
                 } catch (Exception e) {

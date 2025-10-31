@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.content.UriPermission;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -723,17 +724,37 @@ public class MainActivity extends AppCompatActivity {
      * 查看服务日志
      */
     public void showServiceLogs(View view) {
-        AlertDialog configDataDialog = new AlertDialog.Builder(this).create();
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
         LayoutInflater inflater = LayoutInflater.from(this);
         View dialogView = inflater.inflate(R.layout.service_logs_view, null);
         TextView textView = dialogView.findViewById(R.id.tv_service_logs);
         ScrollView scrollView = dialogView.findViewById(R.id.tv_logs_scroll_view);
+        
+        // 设置文本可选择和复制
+        textView.setTextIsSelectable(true);
+        
         //显示服务日志
         textView.setText(Alist.ALIST_LOGS);
         //滚动到底部最新日志
         scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
+        
+        // 添加复制全部日志按钮
+        dialogBuilder.setPositiveButton("复制全部", (dialog, which) -> {
+            clipBoardHelper.copyText(Alist.ALIST_LOGS.toString());
+            showToast("日志已复制到剪贴板");
+        });
+        
+        // 添加清空日志按钮
+        dialogBuilder.setNegativeButton("清空日志", (dialog, which) -> {
+            Alist.ALIST_LOGS.setLength(0);
+            Alist.ALIST_LOGS.append("------ 日志已清空 ------\r\n\r\n");
+            showToast("日志已清空");
+        });
+        
+        dialogBuilder.setNeutralButton("关闭", null);
+        
         //日志实时刷新
-        new Thread(() -> {
+        Thread refreshThread = new Thread(() -> {
             while (true) {
                 runOnUiThread(() -> {
                     textView.setText(Alist.ALIST_LOGS);
@@ -746,11 +767,21 @@ public class MainActivity extends AppCompatActivity {
                     Thread.sleep(500);
                 } catch (InterruptedException e) {
                     Log.i(TAG, "fail to print logs: " + e.getLocalizedMessage());
+                    break;
                 }
             }
-        }).start();
-        configDataDialog.setView(dialogView);
+        });
+        refreshThread.start();
+        
+        dialogBuilder.setView(dialogView);
+        AlertDialog configDataDialog = dialogBuilder.create();
         configDataDialog.show();
+        
+        // 对话框关闭时停止刷新线程
+        configDataDialog.setOnDismissListener(dialog -> {
+            refreshThread.interrupt();
+        });
+        
         int width = getResources().getDisplayMetrics().widthPixels;
         int height = getResources().getDisplayMetrics().heightPixels;
         //窗口大小设置必须在show()之后

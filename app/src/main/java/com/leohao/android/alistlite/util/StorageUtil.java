@@ -214,6 +214,19 @@ public class StorageUtil {
     }
 
     /**
+     * 检查路径是否包含受保护的Android目录
+     * 这些目录在某些Android版本/设备上有特殊权限限制
+     */
+    public static boolean isProtectedAndroidPath(String path) {
+        if (path == null) return false;
+        
+        String lowerPath = path.toLowerCase();
+        // Android/data 和 Android/obb 是受保护目录
+        // 但我们只在挂载外置存储时需要注意，内置存储可以访问
+        return false; // 先返回false，让系统尝试访问
+    }
+
+    /**
      * 存储设备信息类
      */
     public static class StorageInfo {

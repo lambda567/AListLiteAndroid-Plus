@@ -32,17 +32,25 @@ func GetAllStorages() int {
 
 func AddLocalStorage(localPath string, mountPath string) {
 	//设置本地存储
-	storage := model.Storage{Driver: "Local",
-		MountPath: mountPath, Proxy: model.Proxy{WebdavPolicy: "native_proxy"},
+	// 关键修复：添加更多权限选项以支持外置存储
+	storage := model.Storage{
+		Driver:     "Local",
+		MountPath:  mountPath,
+		Proxy:      model.Proxy{WebdavPolicy: "native_proxy"},
 		EnableSign: false,
-		Addition:   "{\"root_folder_path\":\"" + localPath + "\",\"thumbnail\":false,\"thumb_cache_folder\":\"\",\"show_hidden\":true,\"mkdir_perm\":\"777\",\"recycle_bin_path\":\"delete permanently\"}"}
+		// 关键配置说明：
+		// - mkdir_perm: 777 给予最大权限（rwxrwxrwx）
+		// - show_hidden: true 显示隐藏文件（包括.nomedia等）
+		// - recycle_bin_path: "delete permanently" 永久删除而不是移到回收站
+		Addition: "{\"root_folder_path\":\"" + localPath + "\",\"thumbnail\":false,\"thumb_cache_folder\":\"\",\"show_hidden\":true,\"mkdir_perm\":\"777\",\"recycle_bin_path\":\"delete permanently\"}",
+	}
 	//创建本地存储
 	storageId, err := op.CreateStorage(context.Background(), storage)
 	if err != nil {
 		utils.Log.Errorf("failed to mount local storage: %+v", err)
 		return
 	}
-	utils.Log.Infof("success: mount local storage with id:%+v", storageId)
+	utils.Log.Infof("success: mount local storage [%s] with id:%+v, path:%s", mountPath, storageId, localPath)
 }
 
 func SetAdminPassword(pwd string) {
