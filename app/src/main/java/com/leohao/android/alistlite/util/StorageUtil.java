@@ -145,9 +145,10 @@ public class StorageUtil {
         }
         
         // 扫描常见的外置存储路径
+        // 关键修复：优先扫描/mnt/media_rw（绕过sdcardfs权限限制）
         String[] possiblePaths = {
+                "/mnt/media_rw",   // 优先！直接访问真实挂载点
                 "/storage",
-                "/mnt/media_rw",
                 "/mnt/sdcard",
                 "/mnt/extSdCard",
                 "/storage/sdcard1",
@@ -169,10 +170,20 @@ public class StorageUtil {
                         if (subDir.canRead()) {
                             boolean canWrite = subDir.canWrite();
                             String name = "外置存储(" + subDir.getName() + ")";
-                            storageList.add(new StorageInfo(name, path, false, true, 
+                            
+                            // 关键修复：如果是/mnt/media_rw路径，标记为直接访问模式
+                            String displayName = name;
+                            if (basePath.equals("/mnt/media_rw")) {
+                                displayName = name + "[直接访问]";
+                                Log.i(TAG, String.format("兜底方案: 发现 %s -> %s (直接访问media_rw，绕过sdcardfs)", 
+                                        displayName, path));
+                            } else {
+                                Log.i(TAG, String.format("兜底方案: 发现 %s -> %s (可写:%s)", 
+                                        name, path, canWrite));
+                            }
+                            
+                            storageList.add(new StorageInfo(displayName, path, false, true, 
                                     canWrite ? "可读写" : "只读"));
-                            Log.i(TAG, String.format("兜底方案: 发现 %s -> %s (可写:%s)", 
-                                    name, path, canWrite));
                         }
                     }
                 }

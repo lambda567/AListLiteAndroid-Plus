@@ -269,11 +269,36 @@ public class AlistService extends Service {
                         continue;
                     }
                     
-                    // 挂载策略：
-                    // - 内置存储：挂载根目录
-                    // - 外置存储：挂载根目录（用户需要完整访问）
+                    // 挂载策略（关键修复！）：
+                    // - 内置存储：使用/storage/emulated/0
+                    // - 外置存储：尝试使用/mnt/media_rw路径（绕过sdcardfs权限检查）
                     String mountPath = storage.isPrimary ? Constants.ALIST_STORAGE_DRIVER_MOUNT_PATH : storage.name;
                     String physicalPath = storage.path;
+                    
+                    // 关键修复：对于外置存储，尝试转换为/mnt/media_rw路径
+                    if (storage.isRemovable && storage.path.startsWith("/storage/")) {
+                        // 从/storage/8956-8C7E转换为/mnt/media_rw/8956-8C7E
+                        String deviceName = storage.path.substring("/storage/".length());
+                        String mediaRwPath = "/mnt/media_rw/" + deviceName;
+                        File mediaRwFile = new File(mediaRwPath);
+                        
+                        // 检查/mnt/media_rw路径是否可访问
+                        if (mediaRwFile.exists() && mediaRwFile.canRead()) {
+                            Log.i(TAG, "   🔑 使用/mnt/media_rw路径绕过sdcardfs: " + mediaRwPath);
+                            physicalPath = mediaRwPath;
+                            
+                            // 测试/mnt/media_rw路径的写入权限
+                            if (mediaRwFile.canWrite()) {
+                                Log.i(TAG, "   ✅ /mnt/media_rw路径可写入！");
+                            } else {
+                                Log.w(TAG, "   ⚠️ /mnt/media_rw路径只读，回退到/storage路径");
+                                physicalPath = storage.path;
+                            }
+                        } else {
+                            Log.w(TAG, "   ⚠️ /mnt/media_rw路径不可访问，使用/storage路径");
+                            Log.w(TAG, "   💡 可能需要WRITE_MEDIA_STORAGE权限");
+                        }
+                    }
                     
                     // 挂载到AList
                     alistServer.addLocalStorageDriver(physicalPath, mountPath);
