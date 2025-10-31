@@ -24,6 +24,8 @@ import com.leohao.android.alistlite.util.AppUtil;
 import com.leohao.android.alistlite.util.Constants;
 import com.leohao.android.alistlite.util.StorageUtil;
 import com.leohao.android.alistlite.util.PermissionDiagnostic;
+import com.leohao.android.alistlite.util.RootUtil;
+import com.leohao.android.alistlite.util.SharedDataHelper;
 
 import java.io.File;
 import java.io.IOException;
@@ -247,6 +249,13 @@ public class AlistService extends Service {
     private void mountAllStorageDevices() {
         try {
             Log.i(TAG, "========== 开始挂载所有存储设备 ==========");
+            
+            // 检查Root状态和用户设置
+            boolean isDeviceRooted = RootUtil.isDeviceRooted();
+            boolean isRootEnabled = SharedDataHelper.getBoolean(Constants.KEY_ROOT_PERMISSION_ENABLED, false);
+            Log.i(TAG, "设备Root状态: " + (isDeviceRooted ? "✅ 已Root" : "❌ 未Root"));
+            Log.i(TAG, "ROOT权限开关: " + (isRootEnabled ? "✅ 已启用" : "❌ 未启用（可在权限配置中启用）"));
+            
             List<StorageUtil.StorageInfo> storageDevices = StorageUtil.getAllStorageDevices(this);
             
             if (storageDevices.isEmpty()) {
@@ -319,8 +328,22 @@ public class AlistService extends Service {
                         if (diagnostic.contains("只读") || diagnostic.contains("✗") || 
                             diagnostic.contains("失败") || diagnostic.contains("ro,")) {
                             Log.w(TAG, "   ⚠️ 检测到权限问题，尝试修复...");
-                            String fixResult = PermissionDiagnostic.tryFixStoragePermissions(physicalPath);
-                            Log.i(TAG, "   " + fixResult);
+                            
+                            // 如果设备已Root且用户启用了ROOT权限，使用Root修复
+                            if (isDeviceRooted && isRootEnabled) {
+                                Log.i(TAG, "   🔓 使用ROOT权限修复外置存储...");
+                                String rootFixResult = RootUtil.fixExternalStorageWithRoot(physicalPath);
+                                Log.i(TAG, rootFixResult);
+                            } else if (isDeviceRooted && !isRootEnabled) {
+                                Log.w(TAG, "   ⚠️ 设备已Root但用户未启用ROOT权限");
+                                Log.w(TAG, "   💡 建议：在"权限配置"中启用"外置存储ROOT权限"");
+                            } else {
+                                // 非Root设备，使用普通方法尝试
+                                String fixResult = PermissionDiagnostic.tryFixStoragePermissions(physicalPath);
+                                Log.i(TAG, "   " + fixResult);
+                                Log.w(TAG, "   ⚠️ 非Root设备，权限修复能力有限");
+                                Log.w(TAG, "   💡 建议：如果设备已Root，重启APP将自动使用Root修复");
+                            }
                             
                             // 再次测试
                             Log.i(TAG, "   🔄 修复后再次测试...");

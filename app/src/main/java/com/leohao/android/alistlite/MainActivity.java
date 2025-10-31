@@ -7,7 +7,6 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
-import android.content.UriPermission;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -106,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
         //初始化广播发送定时器
         initBroadcastScheduler();
     }
-
+    
     /**
      * 初始化广播发送定时器
      */
@@ -525,6 +524,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        
+        // 处理文件选择回调
         if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
             // 处理Android 5.0及以上的回调
             if (mFilePathCallback != null) {

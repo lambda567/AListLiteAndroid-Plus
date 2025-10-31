@@ -26,6 +26,7 @@ import static com.leohao.android.alistlite.AlistLiteApplication.applicationConte
 public class Alist {
     public static String ACTION_STATUS_CHANGED = "com.leohao.android.alistlite.ACTION_STATUS_CHANGED";
     public static StringBuilder ALIST_LOGS = new StringBuilder();
+    private static final int MAX_LOG_SIZE = 500000; // 最大日志500KB，防止内存溢出
     final String TYPE_HTTP = "http";
     final String TYPE_HTTPS = "https";
     final String TYPE_UNIX = "unix";
@@ -94,7 +95,19 @@ public class Alist {
                     break;
             }
             String log = String.format("%s[%s] %s\r\n\r\n", levelName, DateUtil.format(new Date(), "yyyy-MM-dd HH:mm:ss.SSS"), msg);
-            ALIST_LOGS.append(log);
+            
+            // 内存优化：限制日志大小，防止无限增长
+            synchronized (ALIST_LOGS) {
+                if (ALIST_LOGS.length() > MAX_LOG_SIZE) {
+                    // 保留最后80%的日志，删除最旧的20%
+                    int keepSize = (int) (MAX_LOG_SIZE * 0.8);
+                    int deleteSize = ALIST_LOGS.length() - keepSize;
+                    ALIST_LOGS.delete(0, deleteSize);
+                    ALIST_LOGS.insert(0, "... [日志已自动清理旧内容] ...\r\n\r\n");
+                }
+                ALIST_LOGS.append(log);
+            }
+            
             Log.i(AlistService.TAG, log);
         });
     }

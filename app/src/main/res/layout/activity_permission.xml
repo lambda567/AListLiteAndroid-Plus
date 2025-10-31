@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:app="http://schemas.android.com/apk/res-auto"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:orientation="vertical">
@@ -13,9 +14,46 @@
             android:textSize="20sp"
             android:textStyle="bold"/>
 
+    <RelativeLayout
+            android:id="@+id/root_permission_container"
+            android:layout_below="@id/activity_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="15dp"
+            android:background="#FFFFE0">
+        <TextView
+                android:id="@+id/root_permission_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="外置存储ROOT权限"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#FF6600"/>
+        <TextView
+                android:id="@+id/root_permission_desc"
+                android:layout_below="@id/root_permission_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="启用后可解决外置存储写入问题（需要设备已Root）"
+                android:textSize="12sp"
+                android:layout_marginTop="5dp"/>
+        <com.kyleduo.switchbutton.SwitchButton
+                android:id="@+id/root_permission_switch"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:kswThumbColor="#FFFFFF"
+                app:kswBackColor="#CCCCCC"
+                app:kswThumbMarginTop="-5dp"
+                app:kswThumbMarginBottom="-5dp"
+                app:kswThumbMarginLeft="-7.5dp"
+                app:kswThumbMarginRight="-7.5dp"/>
+    </RelativeLayout>
+
     <ListView
             android:id="@+id/permission_list"
-            android:layout_below="@id/activity_title"
+            android:layout_below="@id/root_permission_container"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_margin="5dp"/>
