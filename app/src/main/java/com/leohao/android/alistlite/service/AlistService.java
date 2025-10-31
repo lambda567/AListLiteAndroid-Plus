@@ -336,7 +336,7 @@ public class AlistService extends Service {
                                 Log.i(TAG, rootFixResult);
                             } else if (isDeviceRooted && !isRootEnabled) {
                                 Log.w(TAG, "   ⚠️ 设备已Root但用户未启用ROOT权限");
-                                Log.w(TAG, "   💡 建议：在"权限配置"中启用"外置存储ROOT权限"");
+                                Log.w(TAG, "   💡 建议：在【权限配置】中启用【外置存储ROOT权限】");
                             } else {
                                 // 非Root设备，使用普通方法尝试
                                 String fixResult = PermissionDiagnostic.tryFixStoragePermissions(physicalPath);

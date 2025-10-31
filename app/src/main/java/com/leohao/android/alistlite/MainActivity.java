@@ -86,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> mFilePathCallback;
     private ValueCallback<Uri> mUploadMessage;
     private static final int FILE_CHOOSER_REQUEST_CODE = 100;
+    private static final int REQUEST_CODE_SAF_EXTERNAL_STORAGE = 2001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,10 +101,69 @@ public class MainActivity extends AppCompatActivity {
         initFocusSettings();
         //权限检查
         checkPermissions();
+        //检查外置存储SAF授权（针对非Root设备）
+        checkAndRequestSAFPermission();
         //检查系统更新
         checkUpdates(null);
         //初始化广播发送定时器
         initBroadcastScheduler();
+    }
+    
+    /**
+     * 检查并请求SAF授权（针对非Root设备）
+     */
+    private void checkAndRequestSAFPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            // 检查设备是否Root
+            boolean isRootEnabled = com.leohao.android.alistlite.util.SharedDataHelper.getBoolean(
+                    Constants.KEY_ROOT_PERMISSION_ENABLED, false);
+            
+            // 如果已启用ROOT权限，不需要SAF
+            if (isRootEnabled) {
+                Log.i(TAG, "已启用ROOT权限，跳过SAF授权");
+                return;
+            }
+            
+            // 检查是否已有SAF授权
+            List<android.content.UriPermission> permissions = getContentResolver().getPersistedUriPermissions();
+            if (permissions.isEmpty()) {
+                // 延迟3秒后提示SAF授权
+                new android.os.Handler().postDelayed(() -> {
+                    requestSAFPermission();
+                }, 3000);
+            } else {
+                Log.i(TAG, "✅ 已有SAF授权: " + permissions.size() + "个目录");
+            }
+        }
+    }
+    
+    /**
+     * 请求SAF授权
+     */
+    private void requestSAFPermission() {
+        new AlertDialog.Builder(this)
+                .setTitle("外置存储访问授权")
+                .setMessage("检测到外置存储设备（OTG/SD卡）。\n\n" +
+                        "【方案1：SAF授权】（推荐非Root设备）\n" +
+                        "在下一步中选择外置存储根目录并授权。\n" +
+                        "注意：仅对授权的目录有效。\n\n" +
+                        "【方案2：ROOT权限】（推荐Root设备）\n" +
+                        "在【权限配置】中启用ROOT权限。\n\n" +
+                        "是否开始SAF授权？")
+                .setPositiveButton("开始授权", (dialog, which) -> {
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION |
+                            Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                    try {
+                        startActivityForResult(intent, REQUEST_CODE_SAF_EXTERNAL_STORAGE);
+                    } catch (Exception e) {
+                        showToast("无法启动授权界面");
+                    }
+                })
+                .setNegativeButton("稍后", null)
+                .show();
     }
     
     /**
@@ -524,6 +584,21 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        
+        // 处理SAF授权回调
+        if (requestCode == REQUEST_CODE_SAF_EXTERNAL_STORAGE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                Uri treeUri = data.getData();
+                if (treeUri != null) {
+                    getContentResolver().takePersistableUriPermission(treeUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    Log.i(TAG, "✅ SAF授权成功: " + treeUri);
+                    showToast("外置存储已授权（限SAF支持的操作）", Toast.LENGTH_LONG);
+                }
+            }
+            return;
+        }
         
         // 处理文件选择回调
         if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
