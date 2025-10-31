@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
@@ -8,17 +9,29 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-    <!-- Android 5-12 使用传统读取权限 -->
+    
+    <!-- 存储权限 - 支持Android 5-12 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" 
         android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="32"
+        tools:ignore="ScopedStorage"/>
+    
     <!-- Android 13+ 使用分散的媒体权限 -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
-    <!-- Android 5-10 需要写入权限（Android 5不需要运行时请求，安装时授予） -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <!-- Android 11+ 使用完整存储管理权限 -->
+    
+    <!-- Android 11+ 完整存储管理权限 -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+    
+    <!-- 外置存储（OTG/USB）关键权限 - 电视盒子必需 -->
+    <uses-permission android:name="android.permission.WRITE_MEDIA_STORAGE" 
+        tools:ignore="ProtectedPermissions"/>
+    <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS" 
+        tools:ignore="ProtectedPermissions"/>
+    
+    <!-- 其他权限 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
@@ -31,7 +44,9 @@
             android:usesCleartextTraffic="true"
             android:supportsRtl="true"
             android:requestLegacyExternalStorage="true"
-            android:theme="@style/Theme.AList">
+            android:preserveLegacyExternalStorage="true"
+            android:theme="@style/Theme.AList"
+            tools:targetApi="q">
         <meta-data android:name="ScopedStorage" android:value="true"/>
         <meta-data android:name="BUGLY_APPID" android:value="YOUR_BUGLY_APP_ID"/>
         <meta-data android:name="BUGLY_ENABLE_DEBUG" android:value="false"/>

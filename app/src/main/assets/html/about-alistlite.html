@@ -29,20 +29,21 @@
 </head>
 <body>
 <p align="center">
-    <a href="https://github.com/LeoHaoVIP/AListLiteAndroid" target="_blank" rel="noopener noreferrer"><img
+    <a href="https://github.com/lambda567/AListLiteAndroid-Plus" target="_blank" rel="noopener noreferrer"><img
             width="80px" src="../images/alistlite.png"/>
     </a>
 </p>
-<h3 align="center">AListLite | 在 Android 上一键启动 AList 服务</h3>
-<h4 align="center">AListLite 支持服务一键启动、状态栏磁贴、后台常驻、开机自启和高级配置等功能，界面简洁，上手简单。</h4>
-<p align="center">🔥“您的技能和经验对我们来说非常宝贵。加入我们的开源项目，一起创造有意义的影响吧！”</p>
+<h3 align="center">AListLite Plus | 在 Android 上一键启动 AList 服务</h3>
+<h4 align="center">AListLite Plus 是增强版本，修复了Android 9外置存储写入问题，支持服务一键启动、状态栏磁贴、后台常驻、开机自启和高级配置等功能，界面简洁，上手简单。</h4>
+<p align="center">✨ 基于 <a href="https://github.com/LeoHaoVIP/AListLiteAndroid" target="_blank">LeoHaoVIP/AListLiteAndroid</a> Fork 并增强</p>
 <p align="center">
-    <a href="https://github.com/LeoHaoVIP/AListLiteAndroid/releases" style="color: white" target="_blank"
+    <a href="https://github.com/lambda567/AListLiteAndroid-Plus/releases" style="color: white" target="_blank"
        rel="noopener noreferrer">
-        <img alt="release" src="https://img.shields.io/github/v/release/LeoHaoVIP/AListLiteAndroid"/>
+        <img alt="release" src="https://img.shields.io/github/v/release/lambda567/AListLiteAndroid-Plus"/>
     </a>
     <img alt="platform" src="https://img.shields.io/badge/platform-android-f079f4.svg"/>
     <img alt="language" src="https://img.shields.io/badge/language-java|go-green.svg"/>
+    <img alt="android" src="https://img.shields.io/badge/Android-5.0%2B-green.svg"/>
 </p>
 <p align="center">
     <a href="release-log.html" style="color: white" target="_blank"
@@ -53,18 +54,23 @@
        rel="noopener noreferrer">
         <img src="https://img.shields.io/badge/挂载教程-338888.svg"/>
     </a>
-    <a href="https://github.com/LeoHaoVIP/AListLiteAndroid/issues" style="color: white" target="_blank"
+    <a href="https://github.com/lambda567/AListLiteAndroid-Plus/issues" style="color: white" target="_blank"
        rel="noopener noreferrer">
         <img src="https://img.shields.io/badge/问题反馈-00ccff.svg"/>
     </a>
-    <a href="mailto:zhaowenhao2867@outlook.com" style="color: white" target="_blank"
+    <a href="https://github.com/lambda567/AListLiteAndroid-Plus/discussions" style="color: white" target="_blank"
        rel="noopener noreferrer">
-        <img src="https://img.shields.io/badge/联系开发者-339966.svg"/>
+        <img src="https://img.shields.io/badge/社区讨论-ff9900.svg"/>
     </a>
-    <a href="reward.html" style="color: white" target="_blank"
-       rel="noopener noreferrer">
-        <img src="https://img.shields.io/badge/项目捐助-ffcc99.svg"/>
-    </a>
+</p>
+<p align="center">
+    <strong>✨ Plus版本新增特性</strong><br/>
+    <span style="font-size: 14px;">
+        🔧 修复Android 9外置存储（OTG U盘）写入权限问题<br/>
+        🎯 优化Android 5.0+系统兼容性<br/>
+        🔐 增强电视盒子精简系统支持<br/>
+        ⚡ 双重权限请求策略，确保权限正确授予
+    </span>
 </p>
 <p align="center"><strong>项目贡献者</strong></p>
 <div align="center" id="contributors">☻ 加载中...</div>
@@ -72,8 +78,8 @@
 </body>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const owner = 'LeoHaoVIP';
-        const repo = 'AListLiteAndroid';
+        const owner = 'lambda567';
+        const repo = 'AListLiteAndroid-Plus';
         const contributorsDiv = document.getElementById('contributors');
         fetch(`https://api.github.com/repos/${owner}/${repo}/contributors`)
             .then(response => response.json())

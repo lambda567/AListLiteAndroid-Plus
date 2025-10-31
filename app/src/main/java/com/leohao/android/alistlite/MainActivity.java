@@ -160,6 +160,22 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         
+        // 首先检查是否已有存储权限（针对电视盒子精简系统）
+        boolean hasStoragePermission = checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) 
+                == PackageManager.PERMISSION_GRANTED;
+        
+        if (!hasStoragePermission) {
+            // 对于Android 6-10，尝试使用系统API直接请求（电视盒子备用方案）
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                Log.w(TAG, "使用系统API请求存储权限（电视盒子兼容模式）");
+                requestPermissions(new String[]{
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                }, 1001);
+                // 继续使用XXPermissions作为备选
+            }
+        }
+        
         // 根据Android版本申请不同的存储权限
         // Android 11+（API 30+）：MANAGE_EXTERNAL_STORAGE（所有文件管理权限）
         // Android 6-10（API 23-29）：READ_EXTERNAL_STORAGE + WRITE_EXTERNAL_STORAGE
@@ -195,6 +211,8 @@ public class MainActivity extends AppCompatActivity {
                         public void onGranted(@NonNull List<String> permissions, boolean allGranted) {
                             if (!allGranted) {
                                 showToast("部分权限未授予，软件可能无法正常运行");
+                                // 针对电视盒子：即使XXPermissions失败，也检查系统权限
+                                checkFallbackPermissions();
                             }
                         }
 
@@ -203,8 +221,50 @@ public class MainActivity extends AppCompatActivity {
                             if (doNotAskAgain) {
                                 showToast("请手动授予相关权限");
                             }
+                            // 针对电视盒子：检查系统权限作为备选
+                            checkFallbackPermissions();
                         }
                     });
+        }
+    }
+    
+    /**
+     * 检查备用权限状态（针对电视盒子精简系统）
+     */
+    private void checkFallbackPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            boolean hasWrite = checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) 
+                    == PackageManager.PERMISSION_GRANTED;
+            boolean hasRead = checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) 
+                    == PackageManager.PERMISSION_GRANTED;
+            
+            if (hasWrite && hasRead) {
+                Log.i(TAG, "✅ 系统存储权限已授予（电视盒子兼容模式）");
+                showToast("存储权限已授予");
+            } else {
+                Log.w(TAG, "⚠️ 系统存储权限未授予 - Write:" + hasWrite + " Read:" + hasRead);
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1001) {
+            boolean allGranted = true;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    break;
+                }
+            }
+            if (allGranted) {
+                Log.i(TAG, "✅ 系统API权限请求成功（电视盒子模式）");
+                showToast("存储权限已授予");
+            } else {
+                Log.w(TAG, "⚠️ 系统API权限请求失败");
+                showToast("存储权限被拒绝，请在设置中手动授予");
+            }
         }
     }
 
