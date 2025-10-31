@@ -22,8 +22,11 @@ import com.leohao.android.alistlite.broadcast.CopyReceiver;
 import com.leohao.android.alistlite.model.Alist;
 import com.leohao.android.alistlite.util.AppUtil;
 import com.leohao.android.alistlite.util.Constants;
+import com.leohao.android.alistlite.util.StorageUtil;
 
+import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -84,8 +87,8 @@ public class AlistService extends Service {
                     //判断 AList 是否为首次初始化
                     boolean hasInitialized = AppUtil.checkAlistHasInitialized();
                     if (!hasInitialized) {
-                        //挂载本地存储
-                        alistServer.addLocalStorageDriver(Environment.getExternalStorageDirectory().getAbsolutePath(), Constants.ALIST_STORAGE_DRIVER_MOUNT_PATH);
+                        //自动挂载所有存储设备（包括内置存储、SD卡、OTG）
+                        mountAllStorageDevices();
                         //初始化密码
                         alistServer.setAdminPassword(Constants.ALIST_DEFAULT_PASSWORD);
                         //管理员用户名
@@ -233,6 +236,71 @@ public class AlistService extends Service {
             //更新磁贴开关状态
             Intent tileServiceIntent = new Intent(this, AlistTileService.class).setAction(actionName);
             LocalBroadcastManager.getInstance(this).sendBroadcast(tileServiceIntent);
+        }
+    }
+
+    /**
+     * 挂载所有存储设备（包括内置存储、SD卡、OTG）
+     * 这是解决Android 9外置存储写入问题的关键
+     */
+    private void mountAllStorageDevices() {
+        try {
+            Log.i(TAG, "========== 开始挂载所有存储设备 ==========");
+            List<StorageUtil.StorageInfo> storageDevices = StorageUtil.getAllStorageDevices(this);
+            
+            if (storageDevices.isEmpty()) {
+                Log.w(TAG, "⚠️ 未发现任何存储设备，使用默认内置存储");
+                // 兜底：挂载默认内置存储
+                String defaultPath = Environment.getExternalStorageDirectory().getAbsolutePath();
+                alistServer.addLocalStorageDriver(defaultPath, Constants.ALIST_STORAGE_DRIVER_MOUNT_PATH);
+                Log.i(TAG, "✅ 已挂载默认存储: " + defaultPath);
+                return;
+            }
+            
+            // 挂载所有发现的存储设备
+            int mountCount = 0;
+            for (StorageUtil.StorageInfo storage : storageDevices) {
+                try {
+                    // 验证路径可访问
+                    File storageFile = new File(storage.path);
+                    if (!storageFile.exists() || !storageFile.canRead()) {
+                        Log.w(TAG, "⚠️ 跳过不可访问的存储: " + storage.name + " -> " + storage.path);
+                        continue;
+                    }
+                    
+                    // 挂载到AList
+                    String mountPath = storage.isPrimary ? Constants.ALIST_STORAGE_DRIVER_MOUNT_PATH : storage.name;
+                    alistServer.addLocalStorageDriver(storage.path, mountPath);
+                    mountCount++;
+                    
+                    Log.i(TAG, String.format("✅ 已挂载 [%d/%d]: %s -> %s", 
+                            mountCount, storageDevices.size(), mountPath, storage.path));
+                    
+                    // 检查写入权限
+                    if (storageFile.canWrite()) {
+                        Log.i(TAG, "   ✓ 可写入");
+                    } else {
+                        Log.w(TAG, "   ⚠ 只读模式");
+                    }
+                    
+                } catch (Exception e) {
+                    Log.e(TAG, "❌ 挂载失败 " + storage.name + ": " + e.getMessage());
+                }
+            }
+            
+            Log.i(TAG, String.format("========== 挂载完成：成功 %d/%d ==========", 
+                    mountCount, storageDevices.size()));
+            
+            if (mountCount > 0) {
+                showToast(String.format("已挂载 %d 个存储设备", mountCount), Toast.LENGTH_SHORT);
+            } else {
+                Log.e(TAG, "❌ 所有存储设备挂载失败！");
+                showToast("存储设备挂载失败，请检查权限", Toast.LENGTH_LONG);
+            }
+            
+        } catch (Exception e) {
+            Log.e(TAG, "挂载存储设备异常: " + e.getMessage(), e);
+            showToast("存储挂载异常: " + e.getMessage(), Toast.LENGTH_LONG);
         }
     }
 
