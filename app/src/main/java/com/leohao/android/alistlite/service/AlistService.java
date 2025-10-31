@@ -29,6 +29,8 @@ import com.leohao.android.alistlite.util.SharedDataHelper;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -269,12 +271,14 @@ public class AlistService extends Service {
             
             // 挂载所有发现的存储设备
             int mountCount = 0;
+            int skippedCount = 0;
             for (StorageUtil.StorageInfo storage : storageDevices) {
                 try {
                     // 验证路径可访问
                     File storageFile = new File(storage.path);
                     if (!storageFile.exists() || !storageFile.canRead()) {
                         Log.w(TAG, "⚠️ 跳过不可访问的存储: " + storage.name + " -> " + storage.path);
+                        skippedCount++;
                         continue;
                     }
                     
@@ -283,6 +287,7 @@ public class AlistService extends Service {
                     // - 外置存储：尝试使用/mnt/media_rw路径（绕过sdcardfs权限检查）
                     String mountPath = storage.isPrimary ? Constants.ALIST_STORAGE_DRIVER_MOUNT_PATH : storage.name;
                     String physicalPath = storage.path;
+                    boolean canWrite = false;
                     
                     // 关键修复：对于外置存储，尝试转换为/mnt/media_rw路径
                     if (storage.isRemovable && storage.path.startsWith("/storage/")) {
@@ -299,6 +304,7 @@ public class AlistService extends Service {
                             // 测试/mnt/media_rw路径的写入权限
                             if (mediaRwFile.canWrite()) {
                                 Log.i(TAG, "   ✅ /mnt/media_rw路径可写入！");
+                                canWrite = true;
                             } else {
                                 Log.w(TAG, "   ⚠️ /mnt/media_rw路径只读，回退到/storage路径");
                                 physicalPath = storage.path;
@@ -306,6 +312,44 @@ public class AlistService extends Service {
                         } else {
                             Log.w(TAG, "   ⚠️ /mnt/media_rw路径不可访问，使用/storage路径");
                             Log.w(TAG, "   💡 可能需要WRITE_MEDIA_STORAGE权限");
+                        }
+                    } else {
+                        // 内置存储或非/storage路径，直接检查
+                        canWrite = storageFile.canWrite();
+                    }
+                    
+                    // Android 9+ 关键修复：对外置存储进行实际写入测试
+                    if (storage.isRemovable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        boolean actuallyWritable = testActualWriteAccess(physicalPath);
+                        if (!actuallyWritable) {
+                            String errorMsg = String.format("❌ [Android 9+] 外置存储 %s 无法写入（权限测试失败）", storage.name);
+                            String reason = "   💡 原因：Android 9+对外置存储有严格的权限限制";
+                            String suggestion1 = "   💡 建议：";
+                            String suggestion2 = "      1. 在【权限配置】中启用【ROOT权限】（如果设备已Root）";
+                            String suggestion3 = "      2. 使用SAF授权（但当前版本Go层不支持SAF URI，功能受限）";
+                            String suggestion4 = "      3. 等待后续版本支持SAF URI映射";
+                            
+                            // 输出到Logcat
+                            Log.e(TAG, errorMsg);
+                            Log.e(TAG, reason);
+                            Log.e(TAG, suggestion1);
+                            Log.e(TAG, suggestion2);
+                            Log.e(TAG, suggestion3);
+                            Log.e(TAG, suggestion4);
+                            
+                            // 同步到APP内部日志（便于用户在APP内查看）
+                            logToAppInternal("ERROR", errorMsg);
+                            logToAppInternal("ERROR", reason);
+                            logToAppInternal("ERROR", suggestion1);
+                            logToAppInternal("ERROR", suggestion2);
+                            logToAppInternal("ERROR", suggestion3);
+                            logToAppInternal("ERROR", suggestion4);
+                            
+                            skippedCount++;
+                            continue; // 跳过无法写入的外置存储
+                        } else {
+                            Log.i(TAG, "   ✅ Android 9+ 写入测试通过");
+                            logToAppInternal("INFO", String.format("✅ Android 9+ 外置存储 %s 写入测试通过", storage.name));
                         }
                     }
                     
@@ -387,11 +431,16 @@ public class AlistService extends Service {
                 }
             }
             
-            Log.i(TAG, String.format("========== 挂载完成：成功 %d/%d ==========", 
-                    mountCount, storageDevices.size()));
+            Log.i(TAG, String.format("========== 挂载完成：成功 %d/%d，跳过 %d ==========", 
+                    mountCount, storageDevices.size(), skippedCount));
             
             if (mountCount > 0) {
-                showToast(String.format("已挂载 %d 个存储设备", mountCount), Toast.LENGTH_SHORT);
+                if (skippedCount > 0) {
+                    showToast(String.format("已挂载 %d 个存储设备，跳过 %d 个（无法写入）", 
+                            mountCount, skippedCount), Toast.LENGTH_LONG);
+                } else {
+                    showToast(String.format("已挂载 %d 个存储设备", mountCount), Toast.LENGTH_SHORT);
+                }
             } else {
                 Log.e(TAG, "❌ 所有存储设备挂载失败！");
                 showToast("存储设备挂载失败，请检查权限", Toast.LENGTH_LONG);
@@ -400,6 +449,110 @@ public class AlistService extends Service {
         } catch (Exception e) {
             Log.e(TAG, "挂载存储设备异常: " + e.getMessage(), e);
             showToast("存储挂载异常: " + e.getMessage(), Toast.LENGTH_LONG);
+        }
+    }
+
+    /**
+     * 记录重要日志到APP内部日志（便于用户在APP内查看）
+     * 
+     * @param level 日志级别：ERROR, WARN, INFO
+     * @param message 日志消息
+     */
+    private void logToAppInternal(String level, String message) {
+        try {
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.CHINA).format(new Date());
+            String logEntry = String.format("%s[%s] [AlistService] %s\r\n\r\n", level, timestamp, message);
+            
+            synchronized (Alist.ALIST_LOGS) {
+                // 检查日志大小，防止内存溢出
+                if (Alist.ALIST_LOGS.length() > 500000) {
+                    int keepSize = (int) (500000 * 0.8);
+                    int deleteSize = Alist.ALIST_LOGS.length() - keepSize;
+                    Alist.ALIST_LOGS.delete(0, deleteSize);
+                    Alist.ALIST_LOGS.insert(0, "... [日志已自动清理旧内容] ...\r\n\r\n");
+                }
+                Alist.ALIST_LOGS.append(logEntry);
+            }
+        } catch (Exception e) {
+            // 如果同步失败，至少保证Logcat输出
+            Log.e(TAG, "记录日志到APP内部失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 测试路径的实际写入能力（Android 9+ 关键修复）
+     * 通过创建、写入、重命名、删除文件来验证是否真正可写
+     * 
+     * @param path 要测试的路径
+     * @return 是否真正可写入
+     */
+    private boolean testActualWriteAccess(String path) {
+        File testDir = new File(path);
+        if (!testDir.exists() || !testDir.isDirectory()) {
+            Log.w(TAG, "   测试路径不存在或不是目录: " + path);
+            return false;
+        }
+        
+        File testFile = null;
+        File renamedFile = null;
+        
+        try {
+            // 测试1：创建文件
+            String testFileName = ".alistlite_write_test_" + System.currentTimeMillis() + ".tmp";
+            testFile = new File(path, testFileName);
+            boolean created = testFile.createNewFile();
+            
+            if (!created) {
+                Log.w(TAG, "   ❌ 测试失败：无法创建文件");
+                return false;
+            }
+            
+            // 测试2：写入内容
+            try (java.io.FileWriter writer = new java.io.FileWriter(testFile)) {
+                writer.write("AListLite write test");
+                writer.flush();
+            } catch (Exception e) {
+                Log.w(TAG, "   ❌ 测试失败：无法写入文件内容: " + e.getMessage());
+                testFile.delete();
+                return false;
+            }
+            
+            // 测试3：重命名文件（Android 9+外置存储的关键测试点）
+            String renamedFileName = ".alistlite_renamed_" + System.currentTimeMillis() + ".tmp";
+            renamedFile = new File(path, renamedFileName);
+            boolean renamed = testFile.renameTo(renamedFile);
+            
+            if (!renamed) {
+                Log.w(TAG, "   ❌ 测试失败：无法重命名文件（这是Android 9+外置存储的常见问题）");
+                testFile.delete();
+                return false;
+            }
+            
+            // 测试4：删除文件
+            boolean deleted = renamedFile.delete();
+            if (!deleted) {
+                Log.w(TAG, "   ❌ 测试失败：无法删除文件");
+                return false;
+            }
+            
+            // 所有测试通过
+            Log.i(TAG, "   ✅ 写入测试通过：可创建、写入、重命名、删除");
+            return true;
+            
+        } catch (Exception e) {
+            Log.e(TAG, "   ❌ 写入测试异常: " + e.getMessage());
+            // 清理测试文件
+            if (testFile != null && testFile.exists()) {
+                try {
+                    testFile.delete();
+                } catch (Exception ignored) {}
+            }
+            if (renamedFile != null && renamedFile.exists()) {
+                try {
+                    renamedFile.delete();
+                } catch (Exception ignored) {}
+            }
+            return false;
         }
     }
 
