@@ -289,15 +289,22 @@ public class AlistService extends Service {
                     String physicalPath = storage.path;
                     boolean canWrite = false;
                     
-                    // 关键修复：对于外置存储，尝试转换为/mnt/media_rw路径
+                    // 关键修复：对于外置存储，强制尝试使用/mnt/media_rw路径
                     if (storage.isRemovable && storage.path.startsWith("/storage/")) {
                         // 从/storage/8956-8C7E转换为/mnt/media_rw/8956-8C7E
                         String deviceName = storage.path.substring("/storage/".length());
                         String mediaRwPath = "/mnt/media_rw/" + deviceName;
                         File mediaRwFile = new File(mediaRwPath);
                         
-                        // 检查/mnt/media_rw路径是否可访问
-                        if (mediaRwFile.exists() && mediaRwFile.canRead()) {
+                        // 优先检查/mnt/media_rw路径（这是外置存储的真实挂载点）
+                        boolean mediaRwExists = mediaRwFile.exists();
+                        boolean mediaRwReadable = mediaRwExists && mediaRwFile.canRead();
+                        
+                        Log.i(TAG, String.format("   🔍 检查/mnt/media_rw路径: %s (存在:%s, 可读:%s)", 
+                                mediaRwPath, mediaRwExists, mediaRwReadable));
+                        
+                        if (mediaRwReadable) {
+                            // 路径存在且可读，尝试使用它
                             Log.i(TAG, "   🔑 使用/mnt/media_rw路径绕过sdcardfs: " + mediaRwPath);
                             physicalPath = mediaRwPath;
                             
@@ -306,12 +313,56 @@ public class AlistService extends Service {
                                 Log.i(TAG, "   ✅ /mnt/media_rw路径可写入！");
                                 canWrite = true;
                             } else {
-                                Log.w(TAG, "   ⚠️ /mnt/media_rw路径只读，回退到/storage路径");
+                                Log.w(TAG, "   ⚠️ /mnt/media_rw路径只读");
+                                // Android 9+上，即使canWrite()返回false，也可能通过实际测试
+                                // 这里暂时标记为不可写，后续通过实际写入测试验证
+                                canWrite = false;
+                            }
+                        } else if (mediaRwExists && !mediaRwReadable) {
+                            // 路径存在但不可读，可能需要权限
+                            Log.w(TAG, "   ⚠️ /mnt/media_rw路径存在但不可读");
+                            Log.w(TAG, "   💡 可能需要WRITE_MEDIA_STORAGE权限或Root权限");
+                            
+                            // 如果设备已Root且启用了Root权限，尝试使用Root访问
+                            if (isDeviceRooted && isRootEnabled) {
+                                Log.i(TAG, "   🔓 尝试使用Root权限访问/mnt/media_rw路径");
+                                // 即使路径不可读，也尝试使用它（Root权限可能会让Go层能够访问）
+                                physicalPath = mediaRwPath;
+                            } else {
+                                // 非Root设备，回退到/storage路径（但大概率无法写入）
+                                Log.w(TAG, "   ⚠️ 非Root设备，回退到/storage路径（可能无法写入）");
                                 physicalPath = storage.path;
                             }
                         } else {
-                            Log.w(TAG, "   ⚠️ /mnt/media_rw路径不可访问，使用/storage路径");
-                            Log.w(TAG, "   💡 可能需要WRITE_MEDIA_STORAGE权限");
+                            // 路径不存在，尝试其他可能的路径格式
+                            Log.w(TAG, "   ⚠️ /mnt/media_rw路径不存在: " + mediaRwPath);
+                            
+                            // 尝试查找可能的挂载点（某些设备可能使用不同的路径格式）
+                            String[] alternativePaths = {
+                                "/mnt/media_rw/" + deviceName,
+                                "/storage/" + deviceName,
+                                "/mnt/sdcard/" + deviceName,
+                                "/storage/sdcard1"
+                            };
+                            
+                            boolean foundAlternative = false;
+                            for (String altPath : alternativePaths) {
+                                File altFile = new File(altPath);
+                                if (altFile.exists() && altFile.canRead() && altFile.canWrite()) {
+                                    Log.i(TAG, "   ✅ 找到可用的替代路径: " + altPath);
+                                    physicalPath = altPath;
+                                    canWrite = true;
+                                    foundAlternative = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!foundAlternative) {
+                                // 如果找不到替代路径，使用原路径但标记为可能无法写入
+                                Log.w(TAG, "   ⚠️ 未找到可用的替代路径，使用/storage路径");
+                                Log.w(TAG, "   💡 警告：此路径在Android 9+上可能无法写入");
+                                physicalPath = storage.path;
+                            }
                         }
                     } else {
                         // 内置存储或非/storage路径，直接检查
@@ -319,37 +370,87 @@ public class AlistService extends Service {
                     }
                     
                     // Android 9+ 关键修复：对外置存储进行实际写入测试
+                    // 注意：这个测试必须在挂载之前执行，确保只有可写的存储才会被挂载
                     if (storage.isRemovable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        Log.i(TAG, String.format("   🧪 [Android 9+] 对外置存储 %s 进行写入测试: %s", storage.name, physicalPath));
                         boolean actuallyWritable = testActualWriteAccess(physicalPath);
                         if (!actuallyWritable) {
                             String errorMsg = String.format("❌ [Android 9+] 外置存储 %s 无法写入（权限测试失败）", storage.name);
-                            String reason = "   💡 原因：Android 9+对外置存储有严格的权限限制";
-                            String suggestion1 = "   💡 建议：";
-                            String suggestion2 = "      1. 在【权限配置】中启用【ROOT权限】（如果设备已Root）";
-                            String suggestion3 = "      2. 使用SAF授权（但当前版本Go层不支持SAF URI，功能受限）";
-                            String suggestion4 = "      3. 等待后续版本支持SAF URI映射";
+                            String reason = "   💡 原因：";
+                            String reasonDetail;
+                            
+                            // 根据使用的路径给出更具体的错误原因
+                            if (physicalPath.startsWith("/storage/")) {
+                                reasonDetail = "使用了 /storage/ 路径，该路径在 Android 9+ 上通过 sdcardfs 挂载，通常只能读取，无法写入。";
+                            } else if (physicalPath.startsWith("/mnt/media_rw/")) {
+                                reasonDetail = "使用了 /mnt/media_rw/ 路径，但该路径可能没有写入权限或需要特殊权限（WRITE_MEDIA_STORAGE 或 Root）。";
+                            } else {
+                                reasonDetail = "路径无法写入，可能是权限不足或挂载为只读。";
+                            }
+                            
+                            String suggestion1 = "   💡 解决方案：";
+                            String suggestion2;
+                            String suggestion3;
+                            String suggestion4 = "";
+                            
+                            if (isDeviceRooted) {
+                                suggestion2 = "      1. 在【权限配置】中启用【ROOT权限】，然后重启应用";
+                                suggestion3 = "      2. Root权限可以让应用直接访问 /mnt/media_rw/ 路径的真实挂载点";
+                                if (!isRootEnabled) {
+                                    suggestion4 = "      3. 当前ROOT权限未启用，请在权限配置中启用";
+                                }
+                            } else {
+                                suggestion2 = "      1. 此设备未Root，无法获得完全的外置存储写入权限";
+                                suggestion3 = "      2. 建议：Root设备后启用ROOT权限";
+                                suggestion4 = "      3. 或者等待后续版本支持SAF URI映射（功能受限）";
+                            }
                             
                             // 输出到Logcat
+                            Log.e(TAG, "   ========================================");
                             Log.e(TAG, errorMsg);
-                            Log.e(TAG, reason);
+                            Log.e(TAG, reason + reasonDetail);
                             Log.e(TAG, suggestion1);
                             Log.e(TAG, suggestion2);
                             Log.e(TAG, suggestion3);
-                            Log.e(TAG, suggestion4);
+                            if (!suggestion4.isEmpty()) {
+                                Log.e(TAG, suggestion4);
+                            }
+                            Log.e(TAG, String.format("   使用路径: %s", physicalPath));
+                            Log.e(TAG, "   ========================================");
                             
                             // 同步到APP内部日志（便于用户在APP内查看）
+                            logToAppInternal("ERROR", "   ========================================");
                             logToAppInternal("ERROR", errorMsg);
-                            logToAppInternal("ERROR", reason);
+                            logToAppInternal("ERROR", reason + reasonDetail);
                             logToAppInternal("ERROR", suggestion1);
                             logToAppInternal("ERROR", suggestion2);
                             logToAppInternal("ERROR", suggestion3);
-                            logToAppInternal("ERROR", suggestion4);
+                            if (!suggestion4.isEmpty()) {
+                                logToAppInternal("ERROR", suggestion4);
+                            }
+                            logToAppInternal("ERROR", String.format("   使用路径: %s", physicalPath));
+                            logToAppInternal("ERROR", "   ========================================");
                             
                             skippedCount++;
-                            continue; // 跳过无法写入的外置存储
+                            continue; // 跳过无法写入的外置存储，不挂载
                         } else {
-                            Log.i(TAG, "   ✅ Android 9+ 写入测试通过");
-                            logToAppInternal("INFO", String.format("✅ Android 9+ 外置存储 %s 写入测试通过", storage.name));
+                            Log.i(TAG, "   ✅ Android 9+ 写入测试通过：可创建、写入、重命名、删除文件");
+                            Log.i(TAG, String.format("   使用路径: %s", physicalPath));
+                            logToAppInternal("INFO", String.format("✅ Android 9+ 外置存储 %s 写入测试通过 (路径: %s)", storage.name, physicalPath));
+                        }
+                    } else if (storage.isRemovable) {
+                        // Android 9 以下版本，也进行简单测试
+                        Log.i(TAG, String.format("   🧪 对外置存储 %s 进行写入测试: %s", storage.name, physicalPath));
+                        if (!canWrite) {
+                            // 即使 canWrite() 返回 false，也尝试实际写入测试（某些设备可能canWrite返回false但实际可写）
+                            boolean actuallyWritable = testActualWriteAccess(physicalPath);
+                            if (!actuallyWritable) {
+                                Log.w(TAG, String.format("   ⚠️ 外置存储 %s 写入测试失败", storage.name));
+                                skippedCount++;
+                                continue;
+                            } else {
+                                Log.i(TAG, String.format("   ✅ 外置存储 %s 写入测试通过（实际测试通过，虽然canWrite()返回false）", storage.name));
+                            }
                         }
                     }
                     
