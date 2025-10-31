@@ -317,6 +317,11 @@ public class AlistService extends Service {
                                 // Android 9+上，即使canWrite()返回false，也可能通过实际测试
                                 // 这里暂时标记为不可写，后续通过实际写入测试验证
                                 canWrite = false;
+                                // 对于电视盒子，我们即使canWrite返回false也标记为可写，因为实际测试可能通过
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                    Log.i(TAG, "   📺 检测到Android 9+设备，标记为可写以进行实际测试");
+                                    canWrite = true;
+                                }
                             }
                         } else if (mediaRwExists && !mediaRwReadable) {
                             // 路径存在但不可读，可能需要权限
@@ -328,6 +333,7 @@ public class AlistService extends Service {
                                 Log.i(TAG, "   🔓 尝试使用Root权限访问/mnt/media_rw路径");
                                 // 即使路径不可读，也尝试使用它（Root权限可能会让Go层能够访问）
                                 physicalPath = mediaRwPath;
+                                canWrite = true; // Root设备假设可写
                             } else {
                                 // 非Root设备，回退到/storage路径（但大概率无法写入）
                                 Log.w(TAG, "   ⚠️ 非Root设备，回退到/storage路径（可能无法写入）");
@@ -348,10 +354,11 @@ public class AlistService extends Service {
                             boolean foundAlternative = false;
                             for (String altPath : alternativePaths) {
                                 File altFile = new File(altPath);
-                                if (altFile.exists() && altFile.canRead() && altFile.canWrite()) {
+                                if (altFile.exists() && altFile.canRead()) {
                                     Log.i(TAG, "   ✅ 找到可用的替代路径: " + altPath);
                                     physicalPath = altPath;
-                                    canWrite = true;
+                                    // 对于电视盒子，即使canWrite返回false也假设可写
+                                    canWrite = altFile.canWrite() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P);
                                     foundAlternative = true;
                                     break;
                                 }
@@ -362,6 +369,8 @@ public class AlistService extends Service {
                                 Log.w(TAG, "   ⚠️ 未找到可用的替代路径，使用/storage路径");
                                 Log.w(TAG, "   💡 警告：此路径在Android 9+上可能无法写入");
                                 physicalPath = storage.path;
+                                // 对于电视盒子，即使canWrite返回false也假设可写
+                                canWrite = storageFile.canWrite() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P);
                             }
                         }
                     } else {
@@ -594,6 +603,12 @@ public class AlistService extends Service {
             return false;
         }
         
+        // 检查目录是否可执行（对某些电视盒子很重要）
+        if (!testDir.canExecute()) {
+            Log.w(TAG, "   测试路径不可执行: " + path);
+            // 对于电视盒子，即使不能执行也可能可以写入
+        }
+        
         File testFile = null;
         File renamedFile = null;
         
@@ -605,7 +620,22 @@ public class AlistService extends Service {
             
             if (!created) {
                 Log.w(TAG, "   ❌ 测试失败：无法创建文件");
-                return false;
+                // 对于某些电视盒子，可能需要特殊处理
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    Log.i(TAG, "   📺 Android 9+设备，尝试使用Root权限创建文件");
+                    // 尝试使用Root权限创建文件
+                    String cmd = "touch " + path + "/" + testFileName;
+                    String result = RootUtil.executeRootCommand(cmd);
+                    Log.d(TAG, "   Root命令结果: " + result);
+                    if (testFile.exists()) {
+                        Log.i(TAG, "   ✅ Root权限创建文件成功");
+                        created = true;
+                    }
+                }
+                
+                if (!created) {
+                    return false;
+                }
             }
             
             // 测试2：写入内容
@@ -625,34 +655,72 @@ public class AlistService extends Service {
             
             if (!renamed) {
                 Log.w(TAG, "   ❌ 测试失败：无法重命名文件（这是Android 9+外置存储的常见问题）");
-                testFile.delete();
-                return false;
+                // 对于电视盒子，尝试使用Root权限重命名
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    Log.i(TAG, "   📺 Android 9+设备，尝试使用Root权限重命名文件");
+                    String cmd = "mv " + testFile.getAbsolutePath() + " " + renamedFile.getAbsolutePath();
+                    String result = RootUtil.executeRootCommand(cmd);
+                    Log.d(TAG, "   Root命令结果: " + result);
+                    if (renamedFile.exists()) {
+                        Log.i(TAG, "   ✅ Root权限重命名文件成功");
+                        renamed = true;
+                    }
+                }
             }
             
-            // 测试4：删除文件
-            boolean deleted = renamedFile.delete();
-            if (!deleted) {
-                Log.w(TAG, "   ❌ 测试失败：无法删除文件");
-                return false;
+            // 测试4：删除重命名后的文件
+            boolean deleted = false;
+            if (renamedFile != null && renamedFile.exists()) {
+                deleted = renamedFile.delete();
+                if (!deleted) {
+                    Log.w(TAG, "   ❌ 测试失败：无法删除重命名后的文件");
+                    // 尝试使用Root权限删除
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        Log.i(TAG, "   📺 Android 9+设备，尝试使用Root权限删除文件");
+                        String cmd = "rm " + renamedFile.getAbsolutePath();
+                        String result = RootUtil.executeRootCommand(cmd);
+                        Log.d(TAG, "   Root命令结果: " + result);
+                        if (!renamedFile.exists()) {
+                            Log.i(TAG, "   ✅ Root权限删除文件成功");
+                            deleted = true;
+                        }
+                    }
+                }
+            } else if (testFile != null && testFile.exists()) {
+                // 如果重命名失败，尝试删除原始文件
+                deleted = testFile.delete();
+                if (!deleted) {
+                    Log.w(TAG, "   ❌ 测试失败：无法删除原始文件");
+                    // 尝试使用Root权限删除
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        Log.i(TAG, "   📺 Android 9+设备，尝试使用Root权限删除文件");
+                        String cmd = "rm " + testFile.getAbsolutePath();
+                        String result = RootUtil.executeRootCommand(cmd);
+                        Log.d(TAG, "   Root命令结果: " + result);
+                        if (!testFile.exists()) {
+                            Log.i(TAG, "   ✅ Root权限删除文件成功");
+                            deleted = true;
+                        }
+                    }
+                }
             }
             
-            // 所有测试通过
-            Log.i(TAG, "   ✅ 写入测试通过：可创建、写入、重命名、删除");
-            return true;
+            if (renamed && deleted) {
+                Log.i(TAG, "   ✅ 实际写入测试全部通过");
+                return true;
+            } else {
+                Log.w(TAG, "   ⚠️ 实际写入测试部分失败 (重命名:" + renamed + ", 删除:" + deleted + ")");
+                // 即使部分测试失败，只要能创建和写入文件就认为基本可用
+                return testFile != null && testFile.exists();
+            }
             
         } catch (Exception e) {
-            Log.e(TAG, "   ❌ 写入测试异常: " + e.getMessage());
+            Log.e(TAG, "   ❌ 实际写入测试异常: " + e.getMessage(), e);
             // 清理测试文件
-            if (testFile != null && testFile.exists()) {
-                try {
-                    testFile.delete();
-                } catch (Exception ignored) {}
-            }
-            if (renamedFile != null && renamedFile.exists()) {
-                try {
-                    renamedFile.delete();
-                } catch (Exception ignored) {}
-            }
+            try {
+                if (testFile != null && testFile.exists()) testFile.delete();
+                if (renamedFile != null && renamedFile.exists()) renamedFile.delete();
+            } catch (Exception ignored) {}
             return false;
         }
     }
@@ -665,3 +733,5 @@ public class AlistService extends Service {
         Toast.makeText(getApplicationContext(), msg, duration).show();
     }
 }
+
+

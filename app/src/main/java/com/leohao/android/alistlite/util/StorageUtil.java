@@ -158,32 +158,40 @@ public class StorageUtil {
         for (String basePath : possiblePaths) {
             File dir = new File(basePath);
             if (dir.exists() && dir.isDirectory()) {
-                File[] subDirs = dir.listFiles();
-                if (subDirs != null) {
-                    for (File subDir : subDirs) {
-                        String path = subDir.getAbsolutePath();
-                        // 跳过已添加的内置存储
-                        if (path.contains("emulated") || path.equals(primaryStorage.getAbsolutePath())) {
-                            continue;
+                // 对于/mnt/media_rw路径，需要特殊处理
+                if (basePath.equals("/mnt/media_rw")) {
+                    File[] subDirs = dir.listFiles();
+                    if (subDirs != null) {
+                        for (File subDir : subDirs) {
+                            String path = subDir.getAbsolutePath();
+                            // 检查是否可读
+                            if (subDir.canRead()) {
+                                // 对于media_rw路径，即使canWrite返回false也要尝试实际写入测试
+                                String name = "外置存储(" + subDir.getName() + ")[直接访问]";
+                                storageList.add(new StorageInfo(name, path, false, true, "直接访问模式"));
+                                Log.i(TAG, String.format("兜底方案: 发现 %s -> %s (直接访问media_rw)", name, path));
+                            }
                         }
-                        // 检查是否可读写
-                        if (subDir.canRead()) {
-                            boolean canWrite = subDir.canWrite();
-                            String name = "外置存储(" + subDir.getName() + ")";
-                            
-                            // 关键修复：如果是/mnt/media_rw路径，标记为直接访问模式
-                            String displayName = name;
-                            if (basePath.equals("/mnt/media_rw")) {
-                                displayName = name + "[直接访问]";
-                                Log.i(TAG, String.format("兜底方案: 发现 %s -> %s (直接访问media_rw，绕过sdcardfs)", 
-                                        displayName, path));
-                            } else {
+                    }
+                } else {
+                    // 处理其他路径
+                    File[] subDirs = dir.listFiles();
+                    if (subDirs != null) {
+                        for (File subDir : subDirs) {
+                            String path = subDir.getAbsolutePath();
+                            // 跳过已添加的内置存储
+                            if (path.contains("emulated") || path.equals(primaryStorage.getAbsolutePath())) {
+                                continue;
+                            }
+                            // 检查是否可读写
+                            if (subDir.canRead()) {
+                                boolean canWrite = subDir.canWrite();
+                                String name = "外置存储(" + subDir.getName() + ")";
+                                storageList.add(new StorageInfo(name, path, false, true, 
+                                        canWrite ? "可读写" : "只读"));
                                 Log.i(TAG, String.format("兜底方案: 发现 %s -> %s (可写:%s)", 
                                         name, path, canWrite));
                             }
-                            
-                            storageList.add(new StorageInfo(displayName, path, false, true, 
-                                    canWrite ? "可读写" : "只读"));
                         }
                     }
                 }
@@ -262,5 +270,3 @@ public class StorageUtil {
                     name, path, isPrimary, isRemovable);
         }
     }
-}
-

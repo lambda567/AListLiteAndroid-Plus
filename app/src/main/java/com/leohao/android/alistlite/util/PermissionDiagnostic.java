@@ -98,22 +98,25 @@ public class PermissionDiagnostic {
      * 检查SELinux状态
      */
     private static String checkSELinux() {
+        StringBuilder result = new StringBuilder();
         try {
+            // 获取SELinux状态
             Process process = Runtime.getRuntime().exec("getenforce");
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String status = reader.readLine();
-            reader.close();
+            process.waitFor();
+            result.append("状态: ").append(status != null ? status : "未知").append("\n");
             
-            if ("Enforcing".equalsIgnoreCase(status)) {
-                return "SELinux: Enforcing（强制模式）\n⚠️ 可能阻止文件操作\n";
-            } else if ("Permissive".equalsIgnoreCase(status)) {
-                return "SELinux: Permissive（宽松模式）\n✓ 不影响文件操作\n";
-            } else {
-                return "SELinux: " + status + "\n";
-            }
+            // 获取SELinux上下文
+            Process process2 = Runtime.getRuntime().exec("ls -Zd " + System.getenv("EXTERNAL_STORAGE"));
+            BufferedReader reader2 = new BufferedReader(new InputStreamReader(process2.getInputStream()));
+            String context = reader2.readLine();
+            process2.waitFor();
+            result.append("上下文: ").append(context != null ? context : "未知").append("\n");
         } catch (Exception e) {
-            return "SELinux检查失败: " + e.getMessage() + "\n";
+            result.append("检查失败: ").append(e.getMessage()).append("\n");
         }
+        return result.toString();
     }
 
     /**
@@ -218,15 +221,26 @@ public class PermissionDiagnostic {
         result.append("尝试修复存储权限...\n");
         
         try {
+            // 检查是否已Root
+            if (!RootUtil.isDeviceRooted()) {
+                result.append("❌ 设备未Root，无法执行高级修复\n");
+                return result.toString();
+            }
+            
             // 尝试1：chmod 777
-            Process p1 = Runtime.getRuntime().exec(new String[]{"chmod", "777", storagePath});
-            int r1 = p1.waitFor();
-            result.append("chmod 777: ").append(r1 == 0 ? "✓" : "✗").append("\n");
+            result.append("1. 执行 chmod 777...\n");
+            String res1 = RootUtil.executeRootCommand("chmod 777 " + storagePath);
+            result.append("   结果: ").append(res1).append("\n");
             
             // 尝试2：chown（需要root）
-            Process p2 = Runtime.getRuntime().exec(new String[]{"su", "-c", "chmod", "777", storagePath});
-            int r2 = p2.waitFor();
-            result.append("su chmod 777: ").append(r2 == 0 ? "✓ (需要Root)" : "✗").append("\n");
+            result.append("2. 执行 chown...\n");
+            String res2 = RootUtil.executeRootCommand("chown media_rw:media_rw " + storagePath);
+            result.append("   结果: ").append(res2).append("\n");
+            
+            // 尝试3：设置SELinux上下文
+            result.append("3. 设置SELinux上下文...\n");
+            String res3 = RootUtil.executeRootCommand("chcon u:object_r:media_rw_data_file:s0 " + storagePath);
+            result.append("   结果: ").append(res3).append("\n");
             
         } catch (Exception e) {
             result.append("修复失败: ").append(e.getMessage()).append("\n");

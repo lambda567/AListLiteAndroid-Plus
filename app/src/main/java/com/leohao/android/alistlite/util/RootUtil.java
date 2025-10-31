@@ -136,14 +136,36 @@ public class RootUtil {
 
         // 1. 设置777权限
         String cmd1 = "chmod -R 777 " + storagePath;
-        result.append(executeRootCommand(cmd1));
+        result.append("执行: ").append(cmd1).append("\n");
+        result.append(executeRootCommand(cmd1)).append("\n");
 
         // 2. 修改所有者为当前APP
         // 获取APP的UID
         String cmd2 = "chown -R $(stat -c %u /data/data/com.leohao.android.alistlite):sdcard_rw " + storagePath;
-        result.append(executeRootCommand(cmd2));
+        result.append("执行: ").append(cmd2).append("\n");
+        result.append(executeRootCommand(cmd2)).append("\n");
+        
+        // 3. 设置SELinux上下文
+        String cmd3 = "chcon -R u:object_r:media_rw_data_file:s0 " + storagePath;
+        result.append("执行: ").append(cmd3).append("\n");
+        result.append(executeRootCommand(cmd3)).append("\n");
 
         return result.toString();
+    }
+    
+    /**
+     * 检查SELinux状态
+     */
+    public static String checkSELinuxStatus() {
+        try {
+            Process process = Runtime.getRuntime().exec("getenforce");
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String status = reader.readLine();
+            process.waitFor();
+            return status != null ? status : "未知";
+        } catch (Exception e) {
+            return "检查失败: " + e.getMessage();
+        }
     }
 }
 
